@@ -10,6 +10,8 @@ from flask import (
     Flask, render_template, request, redirect,
     url_for, jsonify, abort, send_file
 )
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.middleware.proxy_fix import ProxyFix
 import qrcode
 from qrcode.image.styledpil import StyledPilImage
@@ -19,10 +21,32 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = "login"
+
 BASE_DIR = os.path.dirname(__file__)
 DATA_DIR = os.environ.get("DATA_DIR", BASE_DIR)
 os.makedirs(DATA_DIR, exist_ok=True)
 DATABASE = os.path.join(DATA_DIR, "qrtrack.db")
+
+# Fixed credentials
+ADMIN_USER = "antiya"
+ADMIN_PASS_HASH = generate_password_hash("sweet.214171")
+
+
+# User class for Flask-Login
+class User(UserMixin):
+    def __init__(self, username):
+        self.id = username
+        self.username = username
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    if user_id == ADMIN_USER:
+        return User(user_id)
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -106,12 +130,40 @@ def make_qr_b64(data: str) -> str:
 # Routes
 # ---------------------------------------------------------------------------
 
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+    
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "").strip()
+        
+        if username == ADMIN_USER and check_password_hash(ADMIN_PASS_HASH, password):
+            user = User(username)
+            login_user(user)
+            return redirect(url_for("index"))
+        else:
+            return render_template("login.html", error="ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง")
+    
+    return render_template("login.html")
+
+
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for("login"))
+
+
 @app.route("/")
+@login_required
 def index():
     return render_template("index.html")
 
 
 @app.route("/dashboard")
+@login_required
 def dashboard():
     db = get_db()
     links = db.execute(
@@ -122,6 +174,7 @@ def dashboard():
 
 
 @app.route("/create", methods=["POST"])
+@login_required
 def create():
     data = request.get_json(silent=True) or request.form
     original_url = (data.get("url") or "").strip()
@@ -159,7 +212,9 @@ def create():
     })
 
 
+
 @app.route("/qrcode/<short_code>.png")
+@login_required
 def qr_image(short_code):
     base_url = request.host_url.rstrip("/")
     tracking_url = f"{base_url}/r/{short_code}"
@@ -171,7 +226,8 @@ def qr_image(short_code):
 
 
 @app.route("/r/<short_code>")
-def redirect_and_track(short_code):
+def redirect_tracker(short_code):
+
     db = get_db()
     link = db.execute(
         "SELECT * FROM links WHERE short_code = ?", (short_code,)
@@ -241,6 +297,7 @@ def stats(short_code):
 
 
 @app.route("/api/stats/<short_code>")
+@login_required
 def api_stats(short_code):
     db = get_db()
     link = db.execute(
@@ -273,6 +330,7 @@ def api_stats(short_code):
 
 
 @app.route("/delete/<short_code>", methods=["POST"])
+@login_required
 def delete_link(short_code):
     db = get_db()
     link = db.execute(
@@ -285,6 +343,33 @@ def delete_link(short_code):
         db.commit()
     db.close()
     return redirect(url_for("dashboard"))
+
+
+@app.route("/api/dashboard-stats")
+@login_required
+def api_dashboard_stats():
+    """API endpoint for real-time dashboard updates"""
+    db = get_db()
+    links = db.execute(
+        "SELECT id, short_code, title, original_url, created_at, scan_count FROM links ORDER BY created_at DESC"
+    ).fetchall()
+    db.close()
+    
+    return jsonify({
+        "total_links": len(links),
+        "total_scans": sum(l["scan_count"] for l in links),
+        "links": [
+            {
+                "short_code": l["short_code"],
+                "title": l["title"],
+                "original_url": l["original_url"],
+                "created_at": l["created_at"],
+                "scan_count": l["scan_count"],
+            }
+            for l in links
+        ],
+    })
+
 
 
 # Initialize DB when app is imported (works for both Flask dev server and Gunicorn)

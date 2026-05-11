@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>เข้าสู่ระบบ – QRTrack</title>
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <!-- Bootstrap Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --accent: #6366f1;
+      --accent-hover: #4f46e5;
+      --accent-light: rgba(99, 102, 241, 0.12);
+      --bg: #0f1117;
+      --bg-card: #1a1d27;
+      --border: rgba(255, 255, 255, 0.07);
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: linear-gradient(135deg, var(--bg) 0%, #1a1d35 100%);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle, rgba(99,102,241,0.08) 0%, transparent 70%);
+      animation: float 20s ease-in-out infinite;
+      pointer-events: none;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0); }
+      25% { transform: translate(30px, -30px); }
+      50% { transform: translate(0, 60px); }
+      75% { transform: translate(-30px, -30px); }
+    }
+
+    .login-container {
+      position: relative;
+      z-index: 10;
+      max-width: 420px;
+      width: 100%;
+      padding: 20px;
+    }
+
+    .login-card {
+      background: rgba(26, 29, 39, 0.95);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 48px 32px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      animation: slideUp 0.5s ease;
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .login-header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .logo-icon {
+      width: 64px;
+      height: 64px;
+      background: linear-gradient(135deg, var(--accent), #a855f7);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      color: #fff;
+      margin: 0 auto 20px;
+      box-shadow: 0 10px 30px rgba(99,102,241,0.4);
+    }
+
+    .login-title {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #fff, #e2e8f0);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .login-subtitle {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .form-control {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      padding: 12px 16px;
+      font-size: 1rem;
+      transition: all 0.3s;
+      font-family: 'Inter', sans-serif;
+    }
+
+    .form-control::placeholder {
+      color: var(--text-muted);
+    }
+
+    .form-control:focus {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: var(--accent);
+      color: var(--text);
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.2);
+      outline: none;
+    }
+
+    .btn-login {
+      width: 100%;
+      padding: 14px 24px;
+      background: linear-gradient(135deg, var(--accent), #a855f7);
+      border: none;
+      border-radius: 12px;
+      color: #fff;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin-top: 20px;
+      box-shadow: 0 8px 20px rgba(99,102,241,0.4);
+    }
+
+    .btn-login:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px rgba(99,102,241,0.6);
+    }
+
+    .btn-login:active {
+      transform: translateY(0);
+    }
+
+    .alert {
+      border: 1px solid;
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-size: 0.9rem;
+      margin-bottom: 20px;
+    }
+
+    .alert-error {
+      background: rgba(248, 113, 113, 0.1);
+      border-color: rgba(248, 113, 113, 0.3);
+      color: #fca5a5;
+    }
+
+    .demo-badge {
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 24px;
+      font-size: 0.8rem;
+      color: #86efac;
+    }
+
+    .demo-badge strong {
+      display: block;
+      margin-bottom: 6px;
+      color: #fff;
+    }
+
+    .demo-code {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 6px;
+      padding: 8px;
+      font-family: 'Monaco', monospace;
+      font-size: 0.75rem;
+      line-height: 1.5;
+    }
+
+    .icon-input {
+      position: relative;
+    }
+
+    .icon-input i {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      font-size: 1.1rem;
+    }
+
+    .icon-input .form-control {
+      padding-left: 40px;
+    }
+
+    .pulse {
+      animation: pulse-glow 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(99,102,241,0.4); }
+      50% { box-shadow: 0 0 0 10px rgba(99,102,241,0); }
+    }
+  </style>
+</head>
+<body>
+
+<div class="login-container">
+  <div class="login-card">
+    <!-- Header -->
+    <div class="login-header">
+      <div class="logo-icon pulse">
+        <i class="bi bi-qr-code-scan"></i>
+      </div>
+      <h1 class="login-title">QRTrack</h1>
+      <p class="login-subtitle">ยินดีต้อนรับ</p>
+    </div>
+
+    <!-- Error Alert -->
+    {% if error %}
+    <div class="alert alert-error">
+      <i class="bi bi-exclamation-circle-fill me-2"></i>{{ error }}
+    </div>
+    {% endif %}
+
+    <!-- Login Form -->
+    <form method="POST">
+      <div class="form-group">
+        <label class="form-label">ชื่อผู้ใช้</label>
+        <div class="icon-input">
+          <i class="bi bi-person"></i>
+          <input
+            type="text"
+            name="username"
+            class="form-control"
+            placeholder="กรุณากรอกชื่อผู้ใช้"
+            required
+            autofocus
+          />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">รหัสผ่าน</label>
+        <div class="icon-input">
+          <i class="bi bi-lock"></i>
+          <input
+            type="password"
+            name="password"
+            class="form-control"
+            placeholder="กรุณากรอกรหัสผ่าน"
+            required
+          />
+        </div>
+      </div>
+
+      <button type="submit" class="btn-login">
+        <i class="bi bi-door-open me-2"></i>เข้าสู่ระบบ
+      </button>
+    </form>
+
+    <!-- Demo Badge -->
+    <div class="demo-badge">
+      <strong>ข้อมูลสำหรับทดสอบ:</strong>
+      <div class="demo-code">
+        User: <strong>antiya</strong><br>
+        Pass: <strong>sweet.214171</strong>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
