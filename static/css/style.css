@@ -1,0 +1,453 @@
+/* ===================================================
+   QRTrack – Custom Styles
+   =================================================== */
+
+:root {
+  --accent: #6366f1;
+  --accent-hover: #4f46e5;
+  --accent-light: rgba(99, 102, 241, 0.12);
+  --bg: #0f1117;
+  --bg-card: #1a1d27;
+  --bg-card2: #20232f;
+  --border: rgba(255, 255, 255, 0.07);
+  --text: #e2e8f0;
+  --text-muted: #94a3b8;
+  --radius: 16px;
+  --radius-sm: 10px;
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* Base */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.fw-500 { font-weight: 500; }
+.fw-600 { font-weight: 600; }
+.fw-700 { font-weight: 700; }
+.ls-1 { letter-spacing: 0.05em; }
+
+.text-accent { color: var(--accent) !important; }
+.text-gradient {
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ===================================================
+   Navbar
+   =================================================== */
+#mainNav {
+  background: rgba(15, 17, 23, 0.95) !important;
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  z-index: 1030;
+}
+
+.brand-icon {
+  width: 34px;
+  height: 34px;
+  background: var(--accent);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  color: #fff;
+}
+
+.navbar-brand { font-size: 1.25rem; font-weight: 700; color: #fff !important; }
+.navbar-nav .nav-link {
+  color: var(--text-muted) !important;
+  border-radius: 8px;
+  transition: background 0.2s, color 0.2s;
+  font-weight: 500;
+}
+.navbar-nav .nav-link:hover,
+.navbar-nav .nav-link.active {
+  background: var(--accent-light);
+  color: #fff !important;
+}
+
+/* ===================================================
+   Hero Section
+   =================================================== */
+.hero-section {
+  padding: 80px 0 40px;
+  position: relative;
+  overflow: hidden;
+}
+
+.hero-section::before {
+  content: '';
+  position: absolute;
+  top: -200px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 700px;
+  height: 700px;
+  background: radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  background: var(--accent-light);
+  color: var(--accent);
+  border: 1px solid rgba(99,102,241,0.3);
+  border-radius: 999px;
+  padding: 6px 16px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.hero-title {
+  font-size: clamp(2rem, 5vw, 3rem);
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: 1rem;
+}
+
+.hero-desc {
+  font-size: 1.05rem;
+  color: var(--text-muted);
+  max-width: 560px;
+  margin: 0 auto;
+  line-height: 1.7;
+}
+
+/* ===================================================
+   Cards
+   =================================================== */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+}
+
+.card-glass {
+  background: rgba(26, 29, 39, 0.8);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+}
+
+/* ===================================================
+   Forms
+   =================================================== */
+.form-control, .input-group-text {
+  background: rgba(255,255,255,0.04);
+  border-color: var(--border);
+  color: var(--text);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-control:focus {
+  background: rgba(255,255,255,0.06);
+  border-color: var(--accent);
+  color: var(--text);
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.2);
+}
+
+.form-control::placeholder { color: var(--text-muted); }
+.form-label { color: var(--text); font-weight: 500; }
+
+/* ===================================================
+   Buttons
+   =================================================== */
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+  transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+}
+.btn-primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(99,102,241,0.4);
+}
+.btn-primary:active { transform: translateY(0); }
+
+.btn-outline-primary {
+  color: var(--accent);
+  border-color: var(--accent);
+  font-weight: 500;
+}
+.btn-outline-primary:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.btn-outline-secondary {
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+.btn-outline-secondary:hover {
+  background: var(--bg-card2);
+  color: var(--text);
+  border-color: rgba(255,255,255,0.15);
+}
+
+.btn-outline-danger { color: #f87171; border-color: rgba(248,113,113,0.3); }
+.btn-outline-danger:hover { background: rgba(248,113,113,0.15); border-color: #f87171; color: #f87171; }
+
+.btn-generate {
+  height: 52px;
+  font-size: 1rem;
+  border-radius: 12px;
+}
+
+/* ===================================================
+   QR Code Display
+   =================================================== */
+.qr-wrapper {
+  width: 200px;
+  height: 200px;
+  padding: 12px;
+  background: #fff;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.1), var(--shadow);
+}
+
+.qr-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.tracking-url-box {
+  background: rgba(99,102,241,0.08);
+  border: 1px solid rgba(99,102,241,0.2);
+  border-radius: 8px;
+  padding: 10px 14px;
+  word-break: break-all;
+  font-size: 0.85rem;
+}
+
+.tracking-url-box-sm {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+/* ===================================================
+   Result Card animation
+   =================================================== */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.slide-up { animation: slideUp 0.35s ease forwards; }
+
+/* ===================================================
+   Features Section
+   =================================================== */
+.features-section {
+  background: rgba(255,255,255,0.02);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.feature-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color 0.2s, transform 0.2s;
+}
+.feature-card:hover {
+  border-color: rgba(99,102,241,0.4);
+  transform: translateY(-2px);
+}
+
+.feature-icon {
+  width: 52px;
+  height: 52px;
+  background: var(--accent-light);
+  color: var(--accent);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+}
+
+/* ===================================================
+   Dashboard: QR Card
+   =================================================== */
+.qr-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+.qr-card:hover {
+  border-color: rgba(99,102,241,0.35);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+.qr-thumb-wrapper {
+  width: 80px;
+  height: 80px;
+  min-width: 80px;
+  background: #fff;
+  border-radius: 10px;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.qr-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.scan-badge {
+  background: var(--accent-light);
+  color: var(--accent);
+  border: 1px solid rgba(99,102,241,0.3);
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+/* ===================================================
+   Stat Summary Cards (Dashboard top)
+   =================================================== */
+.stat-summary-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.stat-icon {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+}
+.stat-num { font-size: 1.4rem; font-weight: 700; line-height: 1.2; }
+.stat-label { font-size: 0.78rem; color: var(--text-muted); }
+
+/* ===================================================
+   Stats Page
+   =================================================== */
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.stat-big-num { font-size: 2.2rem; font-weight: 700; line-height: 1; margin-bottom: 6px; }
+.stat-big-label { font-size: 0.82rem; color: var(--text-muted); font-weight: 500; }
+
+.info-row { }
+.info-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; font-weight: 600; }
+.info-value { word-break: break-all; }
+
+.scan-table th {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  font-weight: 600;
+  border-color: var(--border);
+}
+.scan-table td { border-color: var(--border); font-size: 0.85rem; }
+.scan-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+/* ===================================================
+   Empty State
+   =================================================== */
+.empty-state { }
+.empty-icon {
+  font-size: 3.5rem;
+  color: var(--text-muted);
+  opacity: 0.4;
+}
+
+/* ===================================================
+   Link hover
+   =================================================== */
+.link-hover {
+  color: var(--text-muted) !important;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.link-hover:hover { color: var(--accent) !important; }
+
+/* ===================================================
+   Toast
+   =================================================== */
+.toast-container { z-index: 9999; }
+.toast-custom {
+  background: var(--bg-card2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+/* ===================================================
+   Footer
+   =================================================== */
+.footer {
+  background: rgba(15,17,23,0.8);
+  border-top: 1px solid var(--border);
+  margin-top: auto;
+}
+
+/* ===================================================
+   Main content grow
+   =================================================== */
+.main-content { flex: 1; }
+
+/* ===================================================
+   Bootstrap overrides
+   =================================================== */
+.bg-primary-subtle { background: rgba(99,102,241,0.12) !important; }
+.bg-success-subtle { background: rgba(34,197,94,0.12) !important; }
+.bg-warning-subtle { background: rgba(234,179,8,0.12) !important; }
+.bg-info-subtle    { background: rgba(56,189,248,0.12) !important; }
+.bg-danger-subtle  { background: rgba(248,113,113,0.12) !important; }
+
+.text-primary { color: var(--accent) !important; }
+.text-success { color: #4ade80 !important; }
+.text-warning { color: #facc15 !important; }
+.text-info    { color: #38bdf8 !important; }
+.text-danger  { color: #f87171 !important; }
+
+.badge.bg-secondary { background: rgba(255,255,255,0.1) !important; color: var(--text-muted); }
+.badge.bg-success { background: rgba(34,197,94,0.2) !important; color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
+
+/* ===================================================
+   Responsive
+   =================================================== */
+@media (max-width: 576px) {
+  .hero-section { padding: 50px 0 24px; }
+  .qr-wrapper { width: 160px; height: 160px; }
+}

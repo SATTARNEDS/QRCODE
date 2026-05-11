@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+{% block title %}สถิติ {{ link.short_code }} – QRTrack{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+
+  <!-- Back -->
+  <div class="mb-4">
+    <a href="/dashboard" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i>กลับ Dashboard
+    </a>
+  </div>
+
+  <div class="row g-4">
+
+    <!-- Left column: QR + info -->
+    <div class="col-lg-4">
+
+      <!-- QR Card -->
+      <div class="card card-glass shadow mb-4">
+        <div class="card-body p-4 text-center">
+          <div class="qr-wrapper mx-auto mb-3">
+            <img src="{{ qr_url }}" alt="QR Code" class="img-fluid rounded-3 qr-img" />
+          </div>
+          <a href="{{ qr_url }}" download="qr_{{ link.short_code }}.png"
+             class="btn btn-outline-primary btn-sm w-100 mb-2">
+            <i class="bi bi-download me-1"></i>ดาวน์โหลด QR Code
+          </a>
+          <button class="btn btn-outline-secondary btn-sm w-100"
+                  onclick="copyUrl('{{ tracking_url }}')">
+            <i class="bi bi-clipboard me-1"></i>คัดลอก Tracking URL
+          </button>
+        </div>
+      </div>
+
+      <!-- Link Info -->
+      <div class="card card-glass shadow">
+        <div class="card-body p-4">
+          <h6 class="fw-600 mb-3 text-muted text-uppercase small ls-1">ข้อมูล QR Code</h6>
+
+          <div class="info-row mb-3">
+            <div class="info-label">ชื่อ</div>
+            <div class="info-value fw-500">{{ link.title or '—' }}</div>
+          </div>
+
+          <div class="info-row mb-3">
+            <div class="info-label">Short Code</div>
+            <div class="info-value">
+              <code class="text-accent">/r/{{ link.short_code }}</code>
+            </div>
+          </div>
+
+          <div class="info-row mb-3">
+            <div class="info-label">URL ปลายทาง</div>
+            <a href="{{ link.original_url }}" target="_blank" rel="noopener noreferrer"
+               class="info-value small text-truncate d-block link-hover">
+              {{ link.original_url }}
+            </a>
+          </div>
+
+          <div class="info-row mb-3">
+            <div class="info-label">Tracking URL</div>
+            <div class="tracking-url-box">
+              <code class="small">{{ tracking_url }}</code>
+            </div>
+          </div>
+
+          <div class="info-row">
+            <div class="info-label">สร้างเมื่อ</div>
+            <div class="info-value small">{{ link.created_at[:16] }}</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Right column: stats -->
+    <div class="col-lg-8">
+
+      <!-- Total scans -->
+      <div class="row g-3 mb-4">
+        <div class="col-sm-4">
+          <div class="stat-card text-center p-4">
+            <div class="stat-big-num text-accent">{{ link.scan_count }}</div>
+            <div class="stat-big-label">สแกนทั้งหมด</div>
+          </div>
+        </div>
+        <div class="col-sm-4">
+          <div class="stat-card text-center p-4">
+            <div class="stat-big-num text-primary">
+              {% if daily_stats %}
+                {{ daily_stats | max(attribute='count') | attr('count') }}
+              {% else %}0{% endif %}
+            </div>
+            <div class="stat-big-label">สแกนสูงสุด (วัน)</div>
+          </div>
+        </div>
+        <div class="col-sm-4">
+          <div class="stat-card text-center p-4">
+            <div class="stat-big-num text-success">
+              {% if daily_stats %}{{ daily_stats|length }}{% else %}0{% endif %}
+            </div>
+            <div class="stat-big-label">วันที่มีการสแกน</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chart -->
+      <div class="card card-glass shadow mb-4">
+        <div class="card-body p-4">
+          <h6 class="fw-600 mb-4">
+            <i class="bi bi-bar-chart-line text-accent me-2"></i>สถิติการสแกนรายวัน (30 วันล่าสุด)
+          </h6>
+          {% if daily_stats %}
+          <div style="height: 250px;">
+            <canvas id="scanChart"></canvas>
+          </div>
+          {% else %}
+          <div class="text-center text-muted py-4">
+            <i class="bi bi-graph-up fs-2 mb-2 d-block opacity-50"></i>
+            ยังไม่มีข้อมูลการสแกน
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Recent Scans -->
+      <div class="card card-glass shadow">
+        <div class="card-body p-4">
+          <h6 class="fw-600 mb-4">
+            <i class="bi bi-clock-history text-accent me-2"></i>การสแกนล่าสุด
+          </h6>
+
+          {% if recent_scans %}
+          <div class="table-responsive">
+            <table class="table table-hover align-middle scan-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>เวลา</th>
+                  <th>IP Address</th>
+                  <th>User Agent</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for scan in recent_scans %}
+                <tr>
+                  <td><span class="badge bg-secondary">{{ loop.index }}</span></td>
+                  <td class="small">{{ scan.scanned_at[:16] }}</td>
+                  <td>
+                    <code class="small">{{ scan.ip_address or '—' }}</code>
+                  </td>
+                  <td class="small text-muted" title="{{ scan.user_agent }}">
+                    {{ (scan.user_agent or '—')[:50] }}{% if (scan.user_agent or '')|length > 50 %}…{% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="text-center text-muted py-4">
+            <i class="bi bi-inbox fs-2 mb-2 d-block opacity-50"></i>
+            ยังไม่มีการสแกน QR Code นี้
+          </div>
+          {% endif %}
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script>
+  function copyUrl(url) {
+    navigator.clipboard.writeText(url).then(() => showToast("คัดลอก URL สำเร็จ!"));
+  }
+
+  {% if daily_stats %}
+  const labels = {{ daily_stats | map(attribute='date') | list | tojson }};
+  const counts = {{ daily_stats | map(attribute='count') | list | tojson }};
+
+  const ctx = document.getElementById("scanChart").getContext("2d");
+  new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        label: "จำนวนสแกน",
+        data: counts,
+        backgroundColor: "rgba(99, 102, 241, 0.7)",
+        borderColor: "rgba(99, 102, 241, 1)",
+        borderWidth: 2,
+        borderRadius: 6,
+        borderSkipped: false,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => ` ${ctx.parsed.y} ครั้ง`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { color: "#94a3b8", maxRotation: 45 },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: {
+            color: "#94a3b8",
+            stepSize: 1,
+            precision: 0,
+          },
+          grid: { color: "rgba(148,163,184,0.1)" },
+        },
+      },
+    },
+  });
+  {% endif %}
+</script>
+{% endblock %}

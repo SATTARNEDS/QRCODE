@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}Dashboard – QRTrack{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+
+  <!-- Header -->
+  <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3">
+    <div>
+      <h2 class="fw-700 mb-1">
+        <i class="bi bi-grid-3x3-gap text-accent me-2"></i>Dashboard
+      </h2>
+      <p class="text-muted mb-0">QR Code ทั้งหมดของคุณ</p>
+    </div>
+    <a href="/" class="btn btn-primary">
+      <i class="bi bi-plus-lg me-1"></i>สร้าง QR Code ใหม่
+    </a>
+  </div>
+
+  {% if not links %}
+  <!-- Empty State -->
+  <div class="empty-state text-center py-5">
+    <div class="empty-icon mb-3">
+      <i class="bi bi-qr-code"></i>
+    </div>
+    <h5 class="fw-600 mb-2">ยังไม่มี QR Code</h5>
+    <p class="text-muted mb-4">เริ่มต้นสร้าง QR Code แรกของคุณได้เลย</p>
+    <a href="/" class="btn btn-primary">
+      <i class="bi bi-plus-lg me-1"></i>สร้าง QR Code
+    </a>
+  </div>
+
+  {% else %}
+
+  <!-- Stats Summary -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="stat-summary-card">
+        <div class="stat-icon bg-primary-subtle text-primary">
+          <i class="bi bi-qr-code-scan"></i>
+        </div>
+        <div>
+          <div class="stat-num">{{ links|length }}</div>
+          <div class="stat-label">QR Code ทั้งหมด</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-summary-card">
+        <div class="stat-icon bg-success-subtle text-success">
+          <i class="bi bi-eye-fill"></i>
+        </div>
+        <div>
+          <div class="stat-num">{{ links | sum(attribute='scan_count') }}</div>
+          <div class="stat-label">การสแกนทั้งหมด</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-summary-card">
+        <div class="stat-icon bg-warning-subtle text-warning">
+          <i class="bi bi-trophy-fill"></i>
+        </div>
+        <div>
+          <div class="stat-num">
+            {% if links %}{{ links | max(attribute='scan_count') | attr('scan_count') }}{% else %}0{% endif %}
+          </div>
+          <div class="stat-label">สแกนสูงสุด</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-summary-card">
+        <div class="stat-icon bg-info-subtle text-info">
+          <i class="bi bi-calendar3"></i>
+        </div>
+        <div>
+          <div class="stat-num">
+            {% if links %}{{ links[0].created_at[:10] }}{% else %}—{% endif %}
+          </div>
+          <div class="stat-label">สร้างล่าสุด</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR Code Grid -->
+  <div class="row g-3">
+    {% for link in links %}
+    <div class="col-md-6 col-lg-4">
+      <div class="card qr-card h-100">
+        <div class="card-body p-4">
+
+          <!-- QR Image + scan badge -->
+          <div class="d-flex align-items-start gap-3 mb-3">
+            <div class="qr-thumb-wrapper">
+              <img
+                src="{{ url_for('qr_image', short_code=link.short_code) }}"
+                alt="QR"
+                class="qr-thumb"
+              />
+            </div>
+            <div class="flex-grow-1 min-w-0">
+              <h6 class="fw-600 mb-1 text-truncate" title="{{ link.title }}">
+                {{ link.title or link.short_code }}
+              </h6>
+              <a href="{{ link.original_url }}" target="_blank" rel="noopener noreferrer"
+                 class="small text-muted text-truncate d-block link-hover"
+                 title="{{ link.original_url }}">
+                {{ link.original_url[:45] }}{% if link.original_url|length > 45 %}…{% endif %}
+              </a>
+              <div class="mt-2">
+                <span class="badge scan-badge">
+                  <i class="bi bi-eye me-1"></i>{{ link.scan_count }} สแกน
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Short code -->
+          <div class="tracking-url-box-sm mb-3">
+            <small class="text-muted">
+              <i class="bi bi-link-45deg me-1"></i>
+              <code>/r/{{ link.short_code }}</code>
+            </small>
+          </div>
+
+          <!-- Created at -->
+          <small class="text-muted d-block mb-3">
+            <i class="bi bi-clock me-1"></i>{{ link.created_at[:16] }}
+          </small>
+
+          <!-- Actions -->
+          <div class="d-flex gap-2">
+            <a href="/stats/{{ link.short_code }}" class="btn btn-primary btn-sm flex-grow-1">
+              <i class="bi bi-bar-chart-line me-1"></i>สถิติ
+            </a>
+            <button class="btn btn-outline-secondary btn-sm"
+                    onclick="copyUrl('{{ request.host_url }}r/{{ link.short_code }}')"
+                    title="คัดลอก URL">
+              <i class="bi bi-clipboard"></i>
+            </button>
+            <form action="/delete/{{ link.short_code }}" method="POST"
+                  onsubmit="return confirm('ลบ QR Code นี้? ข้อมูลสถิติจะหายไปทั้งหมด')">
+              <button type="submit" class="btn btn-outline-danger btn-sm" title="ลบ">
+                <i class="bi bi-trash3"></i>
+              </button>
+            </form>
+          </div>
+
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script>
+  function copyUrl(url) {
+    navigator.clipboard.writeText(url).then(() => showToast("คัดลอก URL สำเร็จ!"));
+  }
+</script>
+{% endblock %}
