@@ -71,7 +71,7 @@
 
           <div class="info-row">
             <div class="info-label">สร้างเมื่อ</div>
-            <div class="info-value small">{{ link.created_at[:16] }}</div>
+            <div class="info-value small">{{ link.created_at_human }}</div>
           </div>
         </div>
       </div>
@@ -116,7 +116,7 @@
             <i class="bi bi-bar-chart-line text-accent me-2"></i>สถิติการสแกนรายวัน (30 วันล่าสุด)
           </h6>
           {% if daily_stats %}
-          <div style="height: 250px;">
+          <div class="chart-wrap">
             <canvas id="scanChart"></canvas>
           </div>
           {% else %}
@@ -150,7 +150,7 @@
                 {% for scan in recent_scans %}
                 <tr>
                   <td><span class="badge bg-secondary">{{ loop.index }}</span></td>
-                  <td class="small">{{ scan.scanned_at[:16] }}</td>
+                  <td class="small">{{ scan.scanned_at_human }}</td>
                   <td>
                     <code class="small">{{ scan.ip_address or '—' }}</code>
                   </td>

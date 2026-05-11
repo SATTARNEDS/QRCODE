@@ -14,3 +14,6 @@ static/qrcodes/*.png
 # OS/editor
 .DS_Store
 Thumbs.db
+
+# Render (ไม่ต้องใช้แล้ว)
+render.yaml

@@ -16,7 +16,7 @@
         </h1>
         <p class="hero-desc">
           แปลง URL เป็น QR Code และติดตามว่ามีคนสแกนไปกี่ครั้ง
-          พร้อมกราฟสถิติรายวัน เหมือน Bitly แต่ใช้ได้ฟรี!
+          พร้อมกราฟสถิติรายวัน
         </p>
       </div>
     </div>
@@ -88,7 +88,7 @@
                 </div>
                 <div class="mt-3 d-flex gap-2 justify-content-center">
                   <a id="downloadBtn" href="#" download class="btn btn-outline-primary btn-sm">
-                    <i class="bi bi-download me-1"></i>ดาวน์โหลด
+                    <i class="bi bi-download me-1"></i>ดาวน์โหลด QR
                   </a>
                   <button class="btn btn-outline-secondary btn-sm" onclick="copyTrackingUrl()">
                     <i class="bi bi-clipboard me-1"></i>คัดลอก URL
@@ -222,6 +222,11 @@
     document.getElementById("qrForm").reset();
     document.getElementById("resultCard").classList.add("d-none");
     document.getElementById("generatorCard").classList.remove("d-none");
+    document.getElementById("qrImage").src = "";
+    document.getElementById("downloadBtn").href = "#";
+    document.getElementById("trackingUrl").textContent = "";
+    document.getElementById("originalUrl").textContent = "";
+    document.getElementById("statsLink").href = "#";
   }
 
   function copyTrackingUrl() {

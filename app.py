@@ -4,7 +4,7 @@ import random
 import sqlite3
 import base64
 from io import BytesIO
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from flask import (
     Flask, render_template, request, redirect,
@@ -29,6 +29,11 @@ BASE_DIR = os.path.dirname(__file__)
 DATA_DIR = os.environ.get("DATA_DIR", BASE_DIR)
 os.makedirs(DATA_DIR, exist_ok=True)
 DATABASE = os.path.join(DATA_DIR, "qrtrack.db")
+THAI_TZ = timezone(timedelta(hours=7))
+THAI_MONTHS_ABBR = [
+    "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
+    "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค.",
+]
 
 # Fixed credentials
 ADMIN_USER = "antiya"
@@ -126,6 +131,96 @@ def make_qr_b64(data: str) -> str:
     return base64.b64encode(buf.getvalue()).decode()
 
 
+def utc_now_string() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def to_thai_display(timestamp: str | None, include_time: bool = True) -> str:
+    if not timestamp:
+        return "-"
+
+    parsed = None
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            parsed = datetime.strptime(timestamp, fmt).replace(tzinfo=timezone.utc)
+            break
+        except ValueError:
+            continue
+
+    if parsed is None:
+        return timestamp
+
+    now_thai = datetime.now(THAI_TZ)
+    local_candidate = parsed.replace(tzinfo=THAI_TZ)
+    thai_time = parsed.astimezone(THAI_TZ)
+
+    # Some existing rows were already stored in Thailand local time.
+    # If converting from UTC pushes the value unrealistically into the future,
+    # keep the original local timestamp instead of double-shifting it.
+    if thai_time > now_thai + timedelta(hours=1):
+        thai_time = local_candidate
+
+    return thai_time.strftime("%Y-%m-%d %H:%M" if include_time else "%Y-%m-%d")
+
+
+def parse_to_thai_time(timestamp: str | None):
+    if not timestamp:
+        return None
+
+    parsed = None
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            parsed = datetime.strptime(timestamp, fmt).replace(tzinfo=timezone.utc)
+            break
+        except ValueError:
+            continue
+
+    if parsed is None:
+        return None
+
+    now_thai = datetime.now(THAI_TZ)
+    local_candidate = parsed.replace(tzinfo=THAI_TZ)
+    thai_time = parsed.astimezone(THAI_TZ)
+    if thai_time > now_thai + timedelta(hours=1):
+        thai_time = local_candidate
+    return thai_time
+
+
+def thai_datetime_human(timestamp: str | None, include_time: bool = True) -> str:
+    thai_time = parse_to_thai_time(timestamp)
+    if thai_time is None:
+        return "-"
+
+    month = THAI_MONTHS_ABBR[thai_time.month - 1]
+    if include_time:
+        return f"{thai_time.day} {month} {thai_time.year} เวลา {thai_time.strftime('%H:%M')} น."
+    return f"{thai_time.day} {month} {thai_time.year}"
+
+
+def serialize_link(link):
+    return {
+        "id": link["id"],
+        "short_code": link["short_code"],
+        "title": link["title"],
+        "original_url": link["original_url"],
+        "created_at": to_thai_display(link["created_at"]),
+        "created_at_human": thai_datetime_human(link["created_at"]),
+        "created_date_human": thai_datetime_human(link["created_at"], include_time=False),
+        "scan_count": link["scan_count"],
+    }
+
+
+def serialize_scan(scan):
+    return {
+        "id": scan["id"],
+        "link_id": scan["link_id"],
+        "scanned_at": to_thai_display(scan["scanned_at"]),
+        "scanned_at_human": thai_datetime_human(scan["scanned_at"]),
+        "user_agent": scan["user_agent"],
+        "ip_address": scan["ip_address"],
+    }
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -196,8 +291,8 @@ def create():
     # Persist to DB
     db = get_db()
     db.execute(
-        "INSERT INTO links (original_url, short_code, title) VALUES (?, ?, ?)",
-        (original_url, short_code, title or original_url[:80]),
+        "INSERT INTO links (original_url, short_code, title, created_at) VALUES (?, ?, ?, ?)",
+        (original_url, short_code, title or original_url[:80], utc_now_string()),
     )
     db.commit()
     db.close()
@@ -210,7 +305,6 @@ def create():
         "qr_image_url": url_for("qr_image", short_code=short_code),
         "stats_url": url_for("stats", short_code=short_code),
     })
-
 
 
 @app.route("/qrcode/<short_code>.png")
@@ -242,8 +336,8 @@ def redirect_tracker(short_code):
     ua = (request.headers.get("User-Agent") or "")[:500]
 
     db.execute(
-        "INSERT INTO scans (link_id, user_agent, ip_address) VALUES (?, ?, ?)",
-        (link["id"], ua, ip),
+        "INSERT INTO scans (link_id, scanned_at, user_agent, ip_address) VALUES (?, ?, ?, ?)",
+        (link["id"], utc_now_string(), ua, ip),
     )
     db.execute(
         "UPDATE links SET scan_count = scan_count + 1 WHERE id = ?",
@@ -273,9 +367,9 @@ def stats(short_code):
     ).fetchall()
 
     daily_stats = db.execute(
-        """SELECT DATE(scanned_at) AS date, COUNT(*) AS count
+        """SELECT DATE(datetime(scanned_at, '+7 hours')) AS date, COUNT(*) AS count
            FROM scans WHERE link_id = ?
-           GROUP BY DATE(scanned_at)
+           GROUP BY DATE(datetime(scanned_at, '+7 hours'))
            ORDER BY date ASC LIMIT 30""",
         (link["id"],),
     ).fetchall()
@@ -285,11 +379,13 @@ def stats(short_code):
     base_url = request.host_url.rstrip("/")
     tracking_url = f"{base_url}/r/{short_code}"
     qr_url = url_for("qr_image", short_code=short_code)
+    formatted_link = serialize_link(link)
+    formatted_scans = [serialize_scan(scan) for scan in recent_scans]
 
     return render_template(
         "stats.html",
-        link=link,
-        recent_scans=recent_scans,
+        link=formatted_link,
+        recent_scans=formatted_scans,
         daily_stats=daily_stats,
         tracking_url=tracking_url,
         qr_url=qr_url,
@@ -309,9 +405,9 @@ def api_stats(short_code):
         return jsonify({"error": "Not found"}), 404
 
     daily_stats = db.execute(
-        """SELECT DATE(scanned_at) AS date, COUNT(*) AS count
+        """SELECT DATE(datetime(scanned_at, '+7 hours')) AS date, COUNT(*) AS count
            FROM scans WHERE link_id = ?
-           GROUP BY DATE(scanned_at)
+           GROUP BY DATE(datetime(scanned_at, '+7 hours'))
            ORDER BY date ASC LIMIT 30""",
         (link["id"],),
     ).fetchall()
@@ -322,7 +418,7 @@ def api_stats(short_code):
         "original_url": link["original_url"],
         "title": link["title"],
         "total_scans": link["scan_count"],
-        "created_at": link["created_at"],
+        "created_at": to_thai_display(link["created_at"]),
         "daily_scans": [
             {"date": s["date"], "count": s["count"]} for s in daily_stats
         ],
@@ -358,16 +454,7 @@ def api_dashboard_stats():
     return jsonify({
         "total_links": len(links),
         "total_scans": sum(l["scan_count"] for l in links),
-        "links": [
-            {
-                "short_code": l["short_code"],
-                "title": l["title"],
-                "original_url": l["original_url"],
-                "created_at": l["created_at"],
-                "scan_count": l["scan_count"],
-            }
-            for l in links
-        ],
+        "links": [serialize_link(link) for link in links],
     })
 
 

@@ -33,147 +33,211 @@
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 <script>
   let dashboardRefreshInterval;
+  let dashboardLoading = false;
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+  }
+
+  function truncateUrl(url, maxLength = 45) {
+    return url.length > maxLength ? `${url.substring(0, maxLength)}…` : url;
+  }
+
+  function renderStatsSummary(data) {
+    const latestCreated = data.links.length > 0 ? data.links[0].created_date_human : '—';
+    document.getElementById("dashboard-content").innerHTML = `
+      <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+          <div class="stat-summary-card">
+            <div class="stat-icon bg-primary-subtle text-primary">
+              <i class="bi bi-qr-code-scan"></i>
+            </div>
+            <div>
+              <div class="stat-num">${data.total_links}</div>
+              <div class="stat-label">QR Code ทั้งหมด</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="stat-summary-card">
+            <div class="stat-icon bg-success-subtle text-success">
+              <i class="bi bi-eye-fill"></i>
+            </div>
+            <div>
+              <div class="stat-num">${data.total_scans}</div>
+              <div class="stat-label">การสแกนทั้งหมด</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="stat-summary-card">
+            <div class="stat-icon bg-warning-subtle text-warning">
+              <i class="bi bi-trophy-fill"></i>
+            </div>
+            <div>
+              <div class="stat-num">${data.links.length > 0 ? Math.max(...data.links.map((link) => link.scan_count)) : 0}</div>
+              <div class="stat-label">สแกนสูงสุด</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="stat-summary-card">
+            <div class="stat-icon bg-info-subtle text-info">
+              <i class="bi bi-calendar3"></i>
+            </div>
+            <div>
+              <div class="stat-num stat-num-date">${latestCreated}</div>
+              <div class="stat-label">สร้างล่าสุด</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function createCardMarkup(link) {
+    const safeTitle = escapeHtml(link.title || link.short_code);
+    const safeUrl = escapeHtml(link.original_url);
+    const shortUrl = escapeHtml(truncateUrl(link.original_url));
+    const safeShortCode = escapeHtml(link.short_code);
+    const safeCreatedAt = escapeHtml(link.created_at_human || link.created_at);
+    const trackingUrl = `{{ request.host_url }}r/${link.short_code}`;
+
+    return `
+      <div class="col-md-6 col-lg-4" data-short-code="${safeShortCode}">
+        <div class="card qr-card h-100">
+          <div class="card-body p-4">
+            <div class="d-flex align-items-start gap-3 mb-3">
+              <div class="qr-thumb-wrapper">
+                <img
+                  src="/qrcode/${safeShortCode}.png"
+                  alt="QR"
+                  class="qr-thumb"
+                />
+              </div>
+              <div class="flex-grow-1" style="min-width:0;overflow:hidden;">
+                <h6 class="fw-600 mb-1 text-truncate-2 js-title" title="${safeTitle}">${safeTitle}</h6>
+                <a href="${safeUrl}" target="_blank" rel="noopener noreferrer"
+                   class="small text-muted text-truncate d-block link-hover js-url"
+                   title="${safeUrl}">${shortUrl}</a>
+                <div class="mt-2">
+                  <span class="badge scan-badge pulse js-scan-badge">
+                    <i class="bi bi-eye me-1"></i>${link.scan_count}สแกน
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div class="tracking-url-box-sm mb-3">
+              <small class="text-muted">
+                <i class="bi bi-link-45deg me-1"></i>
+                <code class="js-short-code">/r/${safeShortCode}</code>
+              </small>
+            </div>
+            <small class="text-muted d-block mb-3 js-created-at">
+              <i class="bi bi-clock me-1"></i>${safeCreatedAt}
+            </small>
+            <div class="d-flex gap-2">
+              <a href="/stats/${safeShortCode}" class="btn btn-primary btn-sm flex-grow-1">
+                <i class="bi bi-bar-chart-line me-1"></i>สถิติ
+              </a>
+              <button class="btn btn-outline-secondary btn-sm"
+                      onclick="copyUrl('${trackingUrl}')"
+                      title="คัดลอก URL">
+                <i class="bi bi-clipboard"></i>
+              </button>
+              <form action="/delete/${safeShortCode}" method="POST" style="margin:0;"
+                    onsubmit="return confirm('ลบ QR Code นี้? ข้อมูลสถิติจะหายไปทั้งหมด')">
+                <button type="submit" class="btn btn-outline-danger btn-sm" title="ลบ" style="width:100%;">
+                  <i class="bi bi-trash3"></i>
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderEmptyState() {
+    document.getElementById("qr-grid").innerHTML = `
+      <div class="col-12">
+        <div class="empty-state text-center py-5">
+          <div class="empty-icon mb-3">
+            <i class="bi bi-qr-code"></i>
+          </div>
+          <h5 class="fw-600 mb-2">ยังไม่มี QR Code</h5>
+          <p class="text-muted mb-4">เริ่มต้นสร้าง QR Code แรกของคุณได้เลย</p>
+          <a href="/" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i>สร้าง QR Code
+          </a>
+        </div>
+      </div>
+    `;
+  }
+
+  function updateOrInsertCards(links) {
+    const grid = document.getElementById("qr-grid");
+    const seen = new Set();
+
+    links.forEach((link, index) => {
+      const selector = `[data-short-code="${CSS.escape(link.short_code)}"]`;
+      let card = grid.querySelector(selector);
+      if (!card) {
+        grid.insertAdjacentHTML("beforeend", createCardMarkup(link));
+        card = grid.querySelector(selector);
+      }
+
+      seen.add(link.short_code);
+      const title = link.title || link.short_code;
+      card.querySelector(".js-title").textContent = title;
+      card.querySelector(".js-title").title = title;
+      card.querySelector(".js-url").textContent = truncateUrl(link.original_url);
+      card.querySelector(".js-url").title = link.original_url;
+      card.querySelector(".js-url").href = link.original_url;
+      card.querySelector(".js-scan-badge").innerHTML = `<i class="bi bi-eye me-1"></i>${link.scan_count}สแกน`;
+      card.querySelector(".js-short-code").textContent = `/r/${link.short_code}`;
+      card.querySelector(".js-created-at").innerHTML = `<i class="bi bi-clock me-1"></i>${link.created_at_human || link.created_at}`;
+
+      const img = card.querySelector("img.qr-thumb");
+      const expectedSrc = `/qrcode/${link.short_code}.png`;
+      if (!img.getAttribute("src") || img.getAttribute("src") !== expectedSrc) {
+        img.setAttribute("src", expectedSrc);
+      }
+
+      if (grid.children[index] !== card) {
+        grid.insertBefore(card, grid.children[index] || null);
+      }
+    });
+
+    Array.from(grid.querySelectorAll("[data-short-code]"))
+      .filter((card) => !seen.has(card.getAttribute("data-short-code")))
+      .forEach((card) => card.remove());
+  }
   
   async function loadDashboard() {
+    if (dashboardLoading) return;
+    dashboardLoading = true;
     try {
       const res = await fetch("/api/dashboard-stats");
       const data = await res.json();
       
       if (!res.ok) return;
-      
-      // Build stats summary
-      const statsHtml = `
-        <div class="row g-3 mb-4">
-          <div class="col-6 col-md-3">
-            <div class="stat-summary-card">
-              <div class="stat-icon bg-primary-subtle text-primary">
-                <i class="bi bi-qr-code-scan"></i>
-              </div>
-              <div>
-                <div class="stat-num">${data.total_links}</div>
-                <div class="stat-label">QR Code ทั้งหมด</div>
-              </div>
-            </div>
-          </div>
-          <div class="col-6 col-md-3">
-            <div class="stat-summary-card">
-              <div class="stat-icon bg-success-subtle text-success">
-                <i class="bi bi-eye-fill"></i>
-              </div>
-              <div>
-                <div class="stat-num">${data.total_scans}</div>
-                <div class="stat-label">การสแกนทั้งหมด</div>
-              </div>
-            </div>
-          </div>
-          <div class="col-6 col-md-3">
-            <div class="stat-summary-card">
-              <div class="stat-icon bg-warning-subtle text-warning">
-                <i class="bi bi-trophy-fill"></i>
-              </div>
-              <div>
-                <div class="stat-num">${data.links.length > 0 ? Math.max(...data.links.map(l => l.scan_count)) : 0}</div>
-                <div class="stat-label">สแกนสูงสุด</div>
-              </div>
-            </div>
-          </div>
-          <div class="col-6 col-md-3">
-            <div class="stat-summary-card">
-              <div class="stat-icon bg-info-subtle text-info">
-                <i class="bi bi-calendar3"></i>
-              </div>
-              <div>
-                <div class="stat-num">${data.links.length > 0 ? data.links[0].created_at.split(' ')[0] : '—'}</div>
-                <div class="stat-label">สร้างล่าสุด</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
-      
-      document.getElementById("dashboard-content").innerHTML = statsHtml;
-      
-      // Build QR cards grid
+      renderStatsSummary(data);
+
       if (data.links.length === 0) {
-        document.getElementById("qr-grid").innerHTML = `
-          <div class="col-12">
-            <div class="empty-state text-center py-5">
-              <div class="empty-icon mb-3">
-                <i class="bi bi-qr-code"></i>
-              </div>
-              <h5 class="fw-600 mb-2">ยังไม่มี QR Code</h5>
-              <p class="text-muted mb-4">เริ่มต้นสร้าง QR Code แรกของคุณได้เลย</p>
-              <a href="/" class="btn btn-primary">
-                <i class="bi bi-plus-lg me-1"></i>สร้าง QR Code
-              </a>
-            </div>
-          </div>
-        `;
+        renderEmptyState();
       } else {
-        let cardsHtml = '';
-        data.links.forEach(link => {
-          cardsHtml += `
-            <div class="col-md-6 col-lg-4">
-              <div class="card qr-card h-100">
-                <div class="card-body p-4">
-                  <div class="d-flex align-items-start gap-3 mb-3">
-                    <div class="qr-thumb-wrapper">
-                      <img
-                        src="{{ url_for('qr_image', short_code='') }}${link.short_code}"
-                        alt="QR"
-                        class="qr-thumb"
-                      />
-                    </div>
-                    <div class="flex-grow-1 min-w-0">
-                      <h6 class="fw-600 mb-1 text-truncate-2" title="${link.title}">
-                        ${link.title}
-                      </h6>
-                      <a href="${link.original_url}" target="_blank" rel="noopener noreferrer"
-                         class="small text-muted text-truncate d-block link-hover"
-                         title="${link.original_url}">
-                        ${link.original_url.substring(0, 45)}${link.original_url.length > 45 ? '…' : ''}
-                      </a>
-                      <div class="mt-2">
-                        <span class="badge scan-badge pulse">
-                          <i class="bi bi-eye me-1"></i>${link.scan_count}สแกน
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="tracking-url-box-sm mb-3">
-                    <small class="text-muted">
-                      <i class="bi bi-link-45deg me-1"></i>
-                      <code>/r/${link.short_code}</code>
-                    </small>
-                  </div>
-                  <small class="text-muted d-block mb-3">
-                    <i class="bi bi-clock me-1"></i>${link.created_at.substring(0, 16)}
-                  </small>
-                  <div class="d-flex gap-2">
-                    <a href="/stats/${link.short_code}" class="btn btn-primary btn-sm flex-grow-1">
-                      <i class="bi bi-bar-chart-line me-1"></i>สถิติ
-                    </a>
-                    <button class="btn btn-outline-secondary btn-sm"
-                            onclick="copyUrl('{{ request.host_url }}r/${link.short_code}')"
-                            title="คัดลอก URL">
-                      <i class="bi bi-clipboard"></i>
-                    </button>
-                    <form action="/delete/${link.short_code}" method="POST" style="margin:0;"
-                          onsubmit="return confirm('ลบ QR Code นี้? ข้อมูลสถิติจะหายไปทั้งหมด')">
-                      <button type="submit" class="btn btn-outline-danger btn-sm" title="ลบ" style="width:100%;">
-                        <i class="bi bi-trash3"></i>
-                      </button>
-                    </form>
-                  </div>
-                </div>
-              </div>
-            </div>
-          `;
-        });
-        document.getElementById("qr-grid").innerHTML = cardsHtml;
+        updateOrInsertCards(data.links);
       }
     } catch (err) {
       console.error("Dashboard load error:", err);
+    } finally {
+      dashboardLoading = false;
     }
   }
   
