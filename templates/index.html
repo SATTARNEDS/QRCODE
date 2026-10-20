@@ -195,6 +195,7 @@
 
       const res = await fetch("/create", {
         method: "POST",
+        headers: { "X-CSRF-Token": "{{ csrf_token() }}" },
         body: formData,
       });
       const contentType = res.headers.get("content-type") || "";

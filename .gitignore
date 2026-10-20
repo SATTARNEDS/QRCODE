@@ -7,8 +7,14 @@ __pycache__/
 .venv/
 venv/
 
+# Local secrets
+.env
+.env.*
+!.env.example
+
 # Local database and generated QR images
 qrtrack.db
+qrtrack.db-*
 static/qrcodes/*.png
 
 # OS/editor

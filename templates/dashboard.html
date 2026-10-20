@@ -34,6 +34,18 @@
 <script>
   let dashboardRefreshInterval;
   let dashboardLoading = false;
+  const csrfToken = "{{ csrf_token() }}";
+
+  function addDeleteCsrfToken(scope) {
+    scope.querySelectorAll('form[action^="/delete/"]').forEach((form) => {
+      if (form.querySelector('input[name="csrf_token"]')) return;
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = "csrf_token";
+      input.value = csrfToken;
+      form.appendChild(input);
+    });
+  }
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -106,7 +118,7 @@
     const shortUrl = escapeHtml(truncateUrl(link.original_url));
     const safeShortCode = escapeHtml(link.short_code);
     const safeCreatedAt = escapeHtml(link.created_at_human || link.created_at);
-    const trackingUrl = `{{ request.host_url }}r/${link.short_code}`;
+    const trackingUrl = `${window.location.origin}/r/${link.short_code}`;
 
     return `
       <div class="col-md-6 col-lg-4" data-short-code="${safeShortCode}">
@@ -193,6 +205,7 @@
       }
 
       seen.add(link.short_code);
+      addDeleteCsrfToken(card);
       const title = link.title || link.short_code;
       card.querySelector(".js-title").textContent = title;
       card.querySelector(".js-title").title = title;

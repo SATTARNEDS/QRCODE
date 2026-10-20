@@ -47,6 +47,23 @@ python3 -m venv .venv
 # 5. สร้าง SECRET_KEY แบบสุ่ม (ถ้ายังไม่มี)
 echo "[5/8] Generating secret key..."
 SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
+if [ -z "${ADMIN_PASSWORD:-}" ]; then
+    read -r -s -p "Set a strong admin password (minimum 14 characters): " ADMIN_PASSWORD
+    echo
+fi
+if [ "${#ADMIN_PASSWORD}" -lt 14 ]; then
+    echo "Admin password must be at least 14 characters."
+    exit 1
+fi
+sudo install -d -m 700 /etc/qrcode
+sudo tee /etc/qrcode/qrcode.env > /dev/null <<EOF
+SECRET_KEY=$SECRET_KEY
+ADMIN_USERNAME=$ADMIN_USERNAME
+ADMIN_PASSWORD=$ADMIN_PASSWORD
+FLASK_ENV=production
+EOF
+sudo chmod 600 /etc/qrcode/qrcode.env
 echo "SECRET_KEY generated (จะถูกใส่ใน systemd service)"
 
 # 6. สร้าง systemd service
@@ -60,7 +77,7 @@ After=network.target
 User=$APP_USER
 WorkingDirectory=$APP_DIR
 Environment="DATA_DIR=$DATA_DIR"
-Environment="SECRET_KEY=$SECRET_KEY"
+EnvironmentFile=/etc/qrcode/qrcode.env
 ExecStart=$APP_DIR/.venv/bin/gunicorn -w 2 -b 127.0.0.1:8000 --timeout 60 app:app
 Restart=always
 RestartSec=5

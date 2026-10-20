@@ -236,6 +236,7 @@
 
     <!-- Login Form -->
     <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
       <div class="form-group">
         <label class="form-label">ชื่อผู้ใช้</label>
         <div class="icon-input">

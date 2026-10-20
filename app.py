@@ -3,22 +3,45 @@ import string
 import random
 import sqlite3
 import base64
+import hmac
+import secrets
+from collections import defaultdict, deque
 from io import BytesIO
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlsplit
 
 from flask import (
     Flask, render_template, request, redirect,
-    url_for, jsonify, abort, send_file
+    url_for, jsonify, abort, send_file, session
 )
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.exceptions import RequestEntityTooLarge
 import qrcode
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
+IS_PRODUCTION = os.environ.get("FLASK_ENV", "production").lower() == "production"
+SECRET_KEY = os.environ.get("SECRET_KEY")
+ADMIN_USER = os.environ.get("ADMIN_USERNAME")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
+
+if not SECRET_KEY or not ADMIN_USER or not ADMIN_PASSWORD:
+    raise RuntimeError(
+        "SECRET_KEY, ADMIN_USERNAME, and ADMIN_PASSWORD must be configured as environment variables."
+    )
+
+app.secret_key = SECRET_KEY
+app.config.update(
+    MAX_CONTENT_LENGTH=2 * 1024 * 1024 + 64 * 1024,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SECURE=IS_PRODUCTION,
+    SESSION_COOKIE_SAMESITE="Lax",
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
+)
+# Trust forwarding headers only from the single reverse proxy configured for the app.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=0, x_port=0)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -30,15 +53,18 @@ os.makedirs(DATA_DIR, exist_ok=True)
 DATABASE = os.path.join(DATA_DIR, "qrtrack.db")
 MAX_LOGO_BYTES = 2 * 1024 * 1024
 ALLOWED_LOGO_FORMATS = {"PNG", "JPEG", "WEBP"}
+Image.MAX_IMAGE_PIXELS = 12_000_000
 THAI_TZ = timezone(timedelta(hours=7))
 THAI_MONTHS_ABBR = [
     "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
     "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค.",
 ]
 
-# Fixed credentials
-ADMIN_USER = "admin"
-ADMIN_PASS_HASH = generate_password_hash("051834694")
+# Credentials only exist in process memory; keep them out of source control.
+ADMIN_PASS_HASH = generate_password_hash(ADMIN_PASSWORD)
+LOGIN_ATTEMPTS: dict[str, deque[datetime]] = defaultdict(deque)
+MAX_LOGIN_ATTEMPTS = 5
+LOGIN_WINDOW = timedelta(minutes=15)
 
 
 # User class for Flask-Login
@@ -46,6 +72,71 @@ class User(UserMixin):
     def __init__(self, username):
         self.id = username
         self.username = username
+
+
+def client_ip() -> str:
+    """Return the first proxy-provided client address after ProxyFix handling."""
+    return request.remote_addr or "unknown"
+
+
+def anonymize_ip(ip_address: str) -> str:
+    """Keep coarse scan-location information without retaining a full IP address."""
+    if "." in ip_address:
+        pieces = ip_address.split(".")
+        if len(pieces) == 4:
+            return ".".join(pieces[:3] + ["0"])
+    if ":" in ip_address:
+        return ":".join(ip_address.split(":")[:4]) + "::"
+    return "unknown"
+
+
+def csrf_token() -> str:
+    token = session.get("csrf_token")
+    if token is None:
+        token = secrets.token_urlsafe(32)
+        session["csrf_token"] = token
+    return token
+
+
+@app.context_processor
+def inject_csrf_token():
+    return {"csrf_token": csrf_token}
+
+
+@app.before_request
+def protect_state_changing_requests():
+    if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
+        return None
+    submitted_token = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token", "")
+    if not hmac.compare_digest(submitted_token, session.get("csrf_token", "")):
+        abort(400, description="Invalid CSRF token")
+    return None
+
+
+@app.after_request
+def add_security_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "same-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "base-uri 'self'; form-action 'self'; frame-ancestors 'none'; "
+        "img-src 'self' data:; connect-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
+        "font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com"
+    )
+    if IS_PRODUCTION and request.is_secure:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def request_too_large(_error):
+    if request.path == "/create":
+        return jsonify({"error": "Logo must be 2 MB or smaller"}), 413
+    return "Request too large", 413
 
 
 @login_manager.user_loader
@@ -111,6 +202,19 @@ def generate_short_code(length: int = 7) -> str:
         db.close()
 
 
+def validate_destination_url(value: str) -> str | None:
+    """Allow only well-formed web URLs; QR redirects are never server-side fetches."""
+    if len(value) > 2048:
+        return None
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return None
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+        return None
+    return value
+
+
 def build_qr_image(data: str, logo_data: bytes | None = None):
     qr = qrcode.QRCode(
         version=1,
@@ -134,7 +238,7 @@ def build_qr_image(data: str, logo_data: bytes | None = None):
             logo.thumbnail((logo_side, logo_side), Image.Resampling.LANCZOS)
             position = ((image.width - logo.width) // 2, (image.height - logo.height) // 2)
             image.alpha_composite(logo, position)
-        except (UnidentifiedImageError, OSError, ValueError):
+        except (UnidentifiedImageError, Image.DecompressionBombError, OSError, ValueError):
             # A previously stored but unreadable file must not prevent a QR download.
             pass
     return image
@@ -248,20 +352,32 @@ def login():
         return redirect(url_for("index"))
     
     if request.method == "POST":
+        now = datetime.now(timezone.utc)
+        attempts = LOGIN_ATTEMPTS[client_ip()]
+        while attempts and now - attempts[0] > LOGIN_WINDOW:
+            attempts.popleft()
+        if len(attempts) >= MAX_LOGIN_ATTEMPTS:
+            return render_template("login.html", error="Too many login attempts. Please try again later."), 429
+
         username = request.form.get("username", "").strip()
-        password = request.form.get("password", "").strip()
+        password = request.form.get("password", "")
         
         if username == ADMIN_USER and check_password_hash(ADMIN_PASS_HASH, password):
+            # Start a fresh session after authentication to prevent session fixation.
+            session.clear()
             user = User(username)
             login_user(user)
+            session.permanent = True
+            LOGIN_ATTEMPTS.pop(client_ip(), None)
             return redirect(url_for("index"))
         else:
+            attempts.append(now)
             return render_template("login.html", error="ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง")
     
     return render_template("login.html")
 
 
-@app.route("/logout")
+@app.route("/logout", methods=["POST"])
 @login_required
 def logout():
     logout_user()
@@ -297,6 +413,9 @@ def create():
 
     if not original_url.startswith(("http://", "https://")):
         original_url = "https://" + original_url
+    original_url = validate_destination_url(original_url)
+    if not original_url:
+        return jsonify({"error": "Please enter a valid http or https URL"}), 400
 
     logo_data = None
     logo_file = request.files.get("logo")
@@ -309,7 +428,7 @@ def create():
                 if logo.format not in ALLOWED_LOGO_FORMATS:
                     raise ValueError
                 logo.verify()
-        except (UnidentifiedImageError, OSError, ValueError):
+        except (UnidentifiedImageError, Image.DecompressionBombError, OSError, ValueError):
             return jsonify({"error": "Please upload a PNG, JPG, or WEBP image"}), 400
 
     short_code = generate_short_code()
@@ -367,9 +486,8 @@ def redirect_tracker(short_code):
         db.close()
         abort(404)
 
-    forwarded = request.headers.get("X-Forwarded-For", "")
-    ip = forwarded.split(",")[0].strip() if forwarded else request.remote_addr
-    ua = (request.headers.get("User-Agent") or "")[:500]
+    ip = anonymize_ip(client_ip())
+    ua = (request.headers.get("User-Agent") or "")[:200]
 
     db.execute(
         "INSERT INTO scans (link_id, scanned_at, user_agent, ip_address) VALUES (?, ?, ?, ?)",
@@ -387,6 +505,7 @@ def redirect_tracker(short_code):
 
 
 @app.route("/stats/<short_code>")
+@login_required
 def stats(short_code):
     db = get_db()
     link = db.execute(
