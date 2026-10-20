@@ -14,8 +14,7 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.middleware.proxy_fix import ProxyFix
 import qrcode
-from qrcode.image.styledpil import StyledPilImage
-from qrcode.image.styles.moduledrawers.pil import RoundedModuleDrawer
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
@@ -29,6 +28,8 @@ BASE_DIR = os.path.dirname(__file__)
 DATA_DIR = os.environ.get("DATA_DIR", BASE_DIR)
 os.makedirs(DATA_DIR, exist_ok=True)
 DATABASE = os.path.join(DATA_DIR, "qrtrack.db")
+MAX_LOGO_BYTES = 2 * 1024 * 1024
+ALLOWED_LOGO_FORMATS = {"PNG", "JPEG", "WEBP"}
 THAI_TZ = timezone(timedelta(hours=7))
 THAI_MONTHS_ABBR = [
     "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
@@ -36,8 +37,8 @@ THAI_MONTHS_ABBR = [
 ]
 
 # Fixed credentials
-ADMIN_USER = "antiya"
-ADMIN_PASS_HASH = generate_password_hash("sweet.214171")
+ADMIN_USER = "admin"
+ADMIN_PASS_HASH = generate_password_hash("051834694")
 
 
 # User class for Flask-Login
@@ -86,6 +87,11 @@ def init_db():
             FOREIGN KEY (link_id) REFERENCES links(id)
         );
     """)
+    # Keep uploaded logos with the QR record so regenerated/downloaded images
+    # always match the preview, including after an application restart.
+    columns = {row["name"] for row in db.execute("PRAGMA table_info(links)")}
+    if "logo_data" not in columns:
+        db.execute("ALTER TABLE links ADD COLUMN logo_data BLOB")
     db.commit()
     db.close()
 
@@ -105,7 +111,7 @@ def generate_short_code(length: int = 7) -> str:
         db.close()
 
 
-def build_qr_image(data: str):
+def build_qr_image(data: str, logo_data: bytes | None = None):
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_H,
@@ -114,18 +120,29 @@ def build_qr_image(data: str):
     )
     qr.add_data(data)
     qr.make(fit=True)
-    try:
-        return qr.make_image(
-            image_factory=StyledPilImage,
-            module_drawer=RoundedModuleDrawer(),
-        )
-    except Exception:
-        return qr.make_image(fill_color="#1a1a2e", back_color="white")
+    # Use the standard high-contrast black-and-white QR style.  It provides
+    # the clearest scan result and matches conventional official QR codes.
+    image = qr.make_image(fill_color="black", back_color="white").convert("RGBA")
+    if logo_data:
+        try:
+            logo = Image.open(BytesIO(logo_data))
+            logo = ImageOps.exif_transpose(logo).convert("RGBA")
+            # Error correction level H permits a prominent centre logo while
+            # preserving reliable scanning.  Do not add a square background:
+            # transparent pixels in a PNG remain transparent around the logo.
+            logo_side = max(1, int(min(image.size) * 0.27))
+            logo.thumbnail((logo_side, logo_side), Image.Resampling.LANCZOS)
+            position = ((image.width - logo.width) // 2, (image.height - logo.height) // 2)
+            image.alpha_composite(logo, position)
+        except (UnidentifiedImageError, OSError, ValueError):
+            # A previously stored but unreadable file must not prevent a QR download.
+            pass
+    return image
 
 
-def make_qr_b64(data: str) -> str:
+def make_qr_b64(data: str, logo_data: bytes | None = None) -> str:
     """Return a base64-encoded PNG of the QR code."""
-    img = build_qr_image(data)
+    img = build_qr_image(data, logo_data)
     buf = BytesIO()
     img.save(buf, format="PNG")
     return base64.b64encode(buf.getvalue()).decode()
@@ -281,18 +298,32 @@ def create():
     if not original_url.startswith(("http://", "https://")):
         original_url = "https://" + original_url
 
+    logo_data = None
+    logo_file = request.files.get("logo")
+    if logo_file and logo_file.filename:
+        logo_data = logo_file.read(MAX_LOGO_BYTES + 1)
+        if len(logo_data) > MAX_LOGO_BYTES:
+            return jsonify({"error": "Logo must be 2 MB or smaller"}), 400
+        try:
+            with Image.open(BytesIO(logo_data)) as logo:
+                if logo.format not in ALLOWED_LOGO_FORMATS:
+                    raise ValueError
+                logo.verify()
+        except (UnidentifiedImageError, OSError, ValueError):
+            return jsonify({"error": "Please upload a PNG, JPG, or WEBP image"}), 400
+
     short_code = generate_short_code()
     base_url = request.host_url.rstrip("/")
     tracking_url = f"{base_url}/r/{short_code}"
 
     # Generate QR preview image (stored as base64 in response)
-    img_b64 = make_qr_b64(tracking_url)
+    img_b64 = make_qr_b64(tracking_url, logo_data)
 
     # Persist to DB
     db = get_db()
     db.execute(
-        "INSERT INTO links (original_url, short_code, title, created_at) VALUES (?, ?, ?, ?)",
-        (original_url, short_code, title or original_url[:80], utc_now_string()),
+        "INSERT INTO links (original_url, short_code, title, created_at, logo_data) VALUES (?, ?, ?, ?, ?)",
+        (original_url, short_code, title or original_url[:80], utc_now_string(), logo_data),
     )
     db.commit()
     db.close()
@@ -310,9 +341,14 @@ def create():
 @app.route("/qrcode/<short_code>.png")
 @login_required
 def qr_image(short_code):
+    db = get_db()
+    link = db.execute("SELECT logo_data FROM links WHERE short_code = ?", (short_code,)).fetchone()
+    db.close()
+    if not link:
+        abort(404)
     base_url = request.host_url.rstrip("/")
     tracking_url = f"{base_url}/r/{short_code}"
-    img = build_qr_image(tracking_url)
+    img = build_qr_image(tracking_url, link["logo_data"])
     buf = BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)

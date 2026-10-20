@@ -64,6 +64,12 @@
                 />
               </div>
 
+              <div class="mb-4">
+                <label for="logoInput" class="form-label fw-500">โลโก้ตรงกลาง QR Code <span class="text-muted fw-normal">(ไม่บังคับ)</span></label>
+                <input type="file" id="logoInput" class="form-control" accept="image/png,image/jpeg,image/webp" />
+                <div class="form-text">รองรับ PNG, JPG และ WEBP ขนาดไม่เกิน 2 MB — แนะนำ PNG พื้นหลังโปร่งใส เพื่อให้โลโก้กลืนกับ QR Code</div>
+              </div>
+
               <button type="submit" class="btn btn-primary btn-lg w-100 btn-generate" id="generateBtn">
                 <span class="btn-text">
                   <i class="bi bi-qr-code me-2"></i>สร้าง QR Code
@@ -181,14 +187,28 @@
     btn.disabled = true;
 
     try {
+      const formData = new FormData();
+      formData.append("url", document.getElementById("urlInput").value);
+      formData.append("title", document.getElementById("titleInput").value);
+      const logo = document.getElementById("logoInput").files[0];
+      if (logo) formData.append("logo", logo);
+
       const res = await fetch("/create", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: document.getElementById("urlInput").value,
-          title: document.getElementById("titleInput").value,
-        }),
+        body: formData,
       });
+      const contentType = res.headers.get("content-type") || "";
+
+      // Flask redirects an expired login session to /login, which is HTML.
+      // Handle that case explicitly instead of showing an unhelpful JSON error.
+      if (res.redirected || !contentType.includes("application/json")) {
+        if (res.url.includes("/login")) {
+          window.location.href = "/login";
+          return;
+        }
+        throw new Error("เซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง กรุณาลองรีเฟรชหน้าเว็บ");
+      }
+
       const data = await res.json();
 
       if (!res.ok) {
@@ -210,7 +230,8 @@
       document.getElementById("resultCard").classList.add("slide-up");
 
     } catch (err) {
-      alert("เกิดข้อผิดพลาด กรุณาลองใหม่");
+      console.error("QR creation failed:", err);
+      alert(err.message || "เกิดข้อผิดพลาด กรุณาลองใหม่");
     } finally {
       btn.querySelector(".btn-text").classList.remove("d-none");
       btn.querySelector(".btn-loading").classList.add("d-none");
