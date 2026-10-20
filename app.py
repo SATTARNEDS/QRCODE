@@ -183,6 +183,8 @@ def init_db():
     columns = {row["name"] for row in db.execute("PRAGMA table_info(links)")}
     if "logo_data" not in columns:
         db.execute("ALTER TABLE links ADD COLUMN logo_data BLOB")
+    if "logo_background" not in columns:
+        db.execute("ALTER TABLE links ADD COLUMN logo_background INTEGER NOT NULL DEFAULT 0")
     db.commit()
     db.close()
 
@@ -215,7 +217,11 @@ def validate_destination_url(value: str) -> str | None:
     return value
 
 
-def build_qr_image(data: str, logo_data: bytes | None = None):
+def build_qr_image(
+    data: str,
+    logo_data: bytes | None = None,
+    logo_background: bool = False,
+):
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_H,
@@ -232,10 +238,16 @@ def build_qr_image(data: str, logo_data: bytes | None = None):
             logo = Image.open(BytesIO(logo_data))
             logo = ImageOps.exif_transpose(logo).convert("RGBA")
             # Error correction level H permits a prominent centre logo while
-            # preserving reliable scanning.  Do not add a square background:
-            # transparent pixels in a PNG remain transparent around the logo.
+            # preserving reliable scanning.
             logo_side = max(1, int(min(image.size) * 0.27))
             logo.thumbnail((logo_side, logo_side), Image.Resampling.LANCZOS)
+            if logo_background:
+                padding = max(6, logo_side // 8)
+                logo_with_background = Image.new(
+                    "RGBA", (logo.width + padding * 2, logo.height + padding * 2), "white"
+                )
+                logo_with_background.alpha_composite(logo, (padding, padding))
+                logo = logo_with_background
             position = ((image.width - logo.width) // 2, (image.height - logo.height) // 2)
             image.alpha_composite(logo, position)
         except (UnidentifiedImageError, Image.DecompressionBombError, OSError, ValueError):
@@ -244,9 +256,13 @@ def build_qr_image(data: str, logo_data: bytes | None = None):
     return image
 
 
-def make_qr_b64(data: str, logo_data: bytes | None = None) -> str:
+def make_qr_b64(
+    data: str,
+    logo_data: bytes | None = None,
+    logo_background: bool = False,
+) -> str:
     """Return a base64-encoded PNG of the QR code."""
-    img = build_qr_image(data, logo_data)
+    img = build_qr_image(data, logo_data, logo_background)
     buf = BytesIO()
     img.save(buf, format="PNG")
     return base64.b64encode(buf.getvalue()).decode()
@@ -418,6 +434,7 @@ def create():
         return jsonify({"error": "Please enter a valid http or https URL"}), 400
 
     logo_data = None
+    logo_background = data.get("logo_background") == "white"
     logo_file = request.files.get("logo")
     if logo_file and logo_file.filename:
         logo_data = logo_file.read(MAX_LOGO_BYTES + 1)
@@ -436,13 +453,15 @@ def create():
     tracking_url = f"{base_url}/r/{short_code}"
 
     # Generate QR preview image (stored as base64 in response)
-    img_b64 = make_qr_b64(tracking_url, logo_data)
+    img_b64 = make_qr_b64(tracking_url, logo_data, logo_background)
 
     # Persist to DB
     db = get_db()
     db.execute(
-        "INSERT INTO links (original_url, short_code, title, created_at, logo_data) VALUES (?, ?, ?, ?, ?)",
-        (original_url, short_code, title or original_url[:80], utc_now_string(), logo_data),
+        """INSERT INTO links
+           (original_url, short_code, title, created_at, logo_data, logo_background)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (original_url, short_code, title or original_url[:80], utc_now_string(), logo_data, int(logo_background)),
     )
     db.commit()
     db.close()
@@ -461,13 +480,15 @@ def create():
 @login_required
 def qr_image(short_code):
     db = get_db()
-    link = db.execute("SELECT logo_data FROM links WHERE short_code = ?", (short_code,)).fetchone()
+    link = db.execute(
+        "SELECT logo_data, logo_background FROM links WHERE short_code = ?", (short_code,)
+    ).fetchone()
     db.close()
     if not link:
         abort(404)
     base_url = request.host_url.rstrip("/")
     tracking_url = f"{base_url}/r/{short_code}"
-    img = build_qr_image(tracking_url, link["logo_data"])
+    img = build_qr_image(tracking_url, link["logo_data"], bool(link["logo_background"]))
     buf = BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)

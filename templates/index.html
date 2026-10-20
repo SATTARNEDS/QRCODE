@@ -67,7 +67,12 @@
               <div class="mb-4">
                 <label for="logoInput" class="form-label fw-500">โลโก้ตรงกลาง QR Code <span class="text-muted fw-normal">(ไม่บังคับ)</span></label>
                 <input type="file" id="logoInput" class="form-control" accept="image/png,image/jpeg,image/webp" />
-                <div class="form-text">รองรับ PNG, JPG และ WEBP ขนาดไม่เกิน 2 MB — แนะนำ PNG พื้นหลังโปร่งใส เพื่อให้โลโก้กลืนกับ QR Code</div>
+                <label for="logoBackgroundInput" class="form-label small fw-500 mt-3">รูปแบบพื้นหลังโลโก้</label>
+                <select id="logoBackgroundInput" class="form-select">
+                  <option value="none" selected>ไม่มีพื้นหลังเพิ่ม (เหมาะกับ PNG โปร่งใส)</option>
+                  <option value="white">มีพื้นหลังสีขาวรองโลโก้</option>
+                </select>
+                <div class="form-text">รองรับ PNG, JPG และ WEBP ขนาดไม่เกิน 2 MB — เลือกพื้นหลังขาวหากโลโก้กลืนกับลาย QR มากเกินไป</div>
               </div>
 
               <button type="submit" class="btn btn-primary btn-lg w-100 btn-generate" id="generateBtn">
@@ -190,6 +195,7 @@
       const formData = new FormData();
       formData.append("url", document.getElementById("urlInput").value);
       formData.append("title", document.getElementById("titleInput").value);
+      formData.append("logo_background", document.getElementById("logoBackgroundInput").value);
       const logo = document.getElementById("logoInput").files[0];
       if (logo) formData.append("logo", logo);
 
